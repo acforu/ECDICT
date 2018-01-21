@@ -53,28 +53,38 @@ class StarDict (object):
 
 	# 初始化并创建必要的表格和索引
 	def __open (self):
+		# sql = '''
+		# CREATE TABLE IF NOT EXISTS "stardict" (
+		# 	"id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
+		# 	"word" VARCHAR(64) COLLATE NOCASE NOT NULL UNIQUE,
+		# 	"sw" VARCHAR(64) COLLATE NOCASE NOT NULL,
+		# 	"phonetic" VARCHAR(64),
+		# 	"definition" TEXT,
+		# 	"translation" TEXT,
+		# 	"pos" VARCHAR(16),
+		# 	"collins" INTEGER DEFAULT(0),
+		# 	"oxford" INTEGER DEFAULT(0),
+		# 	"tag" VARCHAR(64),
+		# 	"bnc" INTEGER DEFAULT(NULL),
+		# 	"frq" INTEGER DEFAULT(NULL),
+		# 	"exchange" TEXT,
+		# 	"detail" TEXT,
+		# 	"audio" TEXT
+		# );
+		# CREATE UNIQUE INDEX IF NOT EXISTS "stardict_1" ON stardict (id);
+		# CREATE UNIQUE INDEX IF NOT EXISTS "stardict_2" ON stardict (word);
+		# CREATE INDEX IF NOT EXISTS "stardict_3" ON stardict (sw, word collate nocase);
+		# CREATE INDEX IF NOT EXISTS "sd_1" ON stardict (word collate nocase);
+		# '''
+
 		sql = '''
 		CREATE TABLE IF NOT EXISTS "stardict" (
 			"id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
 			"word" VARCHAR(64) COLLATE NOCASE NOT NULL UNIQUE,
-			"sw" VARCHAR(64) COLLATE NOCASE NOT NULL,
 			"phonetic" VARCHAR(64),
 			"definition" TEXT,
-			"translation" TEXT,
-			"pos" VARCHAR(16),
-			"collins" INTEGER DEFAULT(0),
-			"oxford" INTEGER DEFAULT(0),
-			"tag" VARCHAR(64),
-			"bnc" INTEGER DEFAULT(NULL),
-			"frq" INTEGER DEFAULT(NULL),
-			"exchange" TEXT,
-			"detail" TEXT,
-			"audio" TEXT
+			"translation" TEXT
 		);
-		CREATE UNIQUE INDEX IF NOT EXISTS "stardict_1" ON stardict (id);
-		CREATE UNIQUE INDEX IF NOT EXISTS "stardict_2" ON stardict (word);
-		CREATE INDEX IF NOT EXISTS "stardict_3" ON stardict (sw, word collate nocase);
-		CREATE INDEX IF NOT EXISTS "sd_1" ON stardict (word collate nocase);
 		'''
 
 		self.__conn = sqlite3.connect(self.__dbname, isolation_level = "IMMEDIATE")
@@ -86,14 +96,17 @@ class StarDict (object):
 		self.__conn.executescript(sql)
 		self.__conn.commit()
 
-		fields = ( 'id', 'word', 'sw', 'phonetic', 'definition', 
-			'translation', 'pos', 'collins', 'oxford', 'tag', 'bnc', 'frq', 
-			'exchange', 'detail', 'audio' )
+		# fields = ( 'id', 'word', 'sw', 'phonetic', 'definition', 
+		# 	'translation', 'pos', 'collins', 'oxford', 'tag', 'bnc', 'frq', 
+		# 	'exchange', 'detail', 'audio' )
+
+		fields = ( 'id', 'word', 'phonetic', 'definition', 
+			'translation')
 		self.__fields = tuple([(fields[i], i) for i in range(len(fields))])
 		self.__names = { }
 		for k, v in self.__fields:
 			self.__names[k] = v
-		self.__enable = self.__fields[3:]
+		self.__enable = self.__fields[2:]
 		return True
 
 	# 数据库记录转化为字典
@@ -198,9 +211,9 @@ class StarDict (object):
 
 	# 注册新单词
 	def register (self, word, items, commit = True):
-		sql = 'INSERT INTO stardict(word, sw) VALUES(?, ?);';
+		sql = 'INSERT INTO stardict(word) VALUES(?);';
 		try:
-			self.__conn.execute(sql, (word, stripword(word)))
+			self.__conn.execute(sql, (word,))
 		except sqlite3.IntegrityError as e:
 			self.out(str(e))
 			return False
@@ -1752,7 +1765,7 @@ def open_dict(filename):
 		return DictMySQL(filename)
 	if os.path.splitext(filename)[-1].lower() in ('.csv', '.txt'):
 		return DictCsv(filename)
-	return StarDict(filename)
+	return StarDict(filename,True)
 
 
 # 字典转化，csv sqlite之间互转
@@ -1779,6 +1792,21 @@ def convert_dict(dstname, srcname):
 			if x == '' or x == '0':
 				data['collins'] = None
 		dst.register(word, data, False)
+	dst.commit()
+	pc.done()
+	return True
+
+# 字典转化，csv sqlite之间互转
+def convert_dict_by_tag(dstname, srcname,tag):
+	dst = open_dict(dstname)
+	src = open_dict(srcname)
+	dst.delete_all()
+	pc = tools.progress(len(src))
+	for word in src.dumps():		
+		pc.next()
+		data = src[word]
+		if 	tag in data['tag']:
+			dst.register(word, data, False)
 	dst.commit()
 	pc.done()
 	return True
